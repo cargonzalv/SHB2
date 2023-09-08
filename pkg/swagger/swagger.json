@@ -1,0 +1,448 @@
+{
+  "consumes": [
+    "application/json",
+    "application/xml"
+  ],
+  "produces": [
+    "application/json",
+    "application/xml"
+  ],
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "swagger": "2.0",
+  "info": {
+    "description": "This service will expose public HTTP Post API for creating a data record of ad event based on open-RTB (or similar) JSON payload\ncoming in each ad-request. The JSON data will ensure privacy compliance by redacting PII data based on privacy flags coming along\nwith data. Each ad event will be converted to Kafka record in Avro format and will be sent to Kafka cluster hosted by Hermes team.\nThe service will produce telemetry logs and events to be stored in Prometheus and to be visualized in Grafana dashboard",
+    "title": "Header-Bidder Listener API.",
+    "contact": {
+      "name": "Irfan Khan",
+      "email": "mohd.khan@samsung.com"
+    },
+    "version": "0.0.1"
+  },
+  "host": "localhost:8085",
+  "paths": {
+    "/hb": {
+      "post": {
+        "description": "This is the description for creating a header bidder. Which can be longer.",
+        "tags": [
+          "Header-Bidder"
+        ],
+        "summary": "This is the summary for creating a header bidder request",
+        "operationId": "create-header-bidder",
+        "parameters": [
+          {
+            "description": "HB Request Body.",
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/HBRequest"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "App": {
+      "description": "This object should be included if the ad supported content is a non-browser application\n(typically in mobile) as opposed to a website.",
+      "type": "object",
+      "properties": {
+        "bundle": {
+          "description": "A platform-specific application identifier intended to be\nunique to the app and independent of the exchange. On\nAndroid, this should be a bundle or package name (e.g.,\ncom.foo.mygame). On iOS, it is typically a numeric ID.",
+          "type": "string",
+          "x-go-name": "Bundle",
+          "example": "test"
+        },
+        "domain": {
+          "description": "Domain of the app (e.g., “mygame.foo.com”).",
+          "type": "string",
+          "x-go-name": "Domain",
+          "example": "test.com"
+        },
+        "id": {
+          "description": "Exchange-specific app ID.",
+          "type": "string",
+          "x-go-name": "Id",
+          "example": "666310"
+        },
+        "name": {
+          "description": "App name (may be aliased at the publisher’s request).",
+          "type": "string",
+          "x-go-name": "Name",
+          "example": "test_app"
+        },
+        "publisher": {
+          "description": "This object describes the publisher of the media in which the ad will be displayed.\nThe publisher is typically the seller in an OpenRTB transaction.",
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Exchange-specific publisher ID.",
+              "type": "string",
+              "x-go-name": "Id",
+              "example": "1681"
+            }
+          },
+          "x-go-name": "Publisher"
+        }
+      },
+      "x-go-package": "github.com/adgear/sps-header-bidder/pkg/springServe"
+    },
+    "Device": {
+      "type": "object",
+      "properties": {
+        "devicetype": {
+          "description": "The general type of device.\n\n1 - Mobile/Tablet Version : 2.0\n2 - Personal Computer Version : 2.0\n3 - Connected TV Version : 2.0\n4 - Phone New for Version : 2.2\n5 - Tablet New for Version : 2.2\n6 - Connected Device New for Version : 2.2\n7 - Set Top Box New for Version : 2.2",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Devicetype",
+          "example": 3
+        },
+        "dnt": {
+          "description": "Standard “Do Not Track” flag as set in the header by the\nbrowser, where 0 = tracking is unrestricted, 1 = do not track.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Dnt",
+          "example": 0
+        },
+        "geo": {
+          "$ref": "#/definitions/Geo"
+        },
+        "ifa": {
+          "description": "ID sanctioned for advertiser use in the clear (i.e., not hashed).",
+          "type": "string",
+          "x-go-name": "Ifa",
+          "example": "11112222-3333-4444-5555-666677778888"
+        },
+        "ip": {
+          "description": "IPv4 address closest to device.",
+          "type": "string",
+          "x-go-name": "Ip",
+          "example": "11.22.33.44"
+        },
+        "language": {
+          "description": "Browser language using ISO-639-1-alpha-2.",
+          "type": "string",
+          "x-go-name": "Language",
+          "example": "en"
+        },
+        "lmt": {
+          "description": "“Limit Ad Tracking” signal commercially endorsed (e.g., iOS,\nAndroid), where 0 = tracking is unrestricted, 1 = tracking must\nbe limited per commercial guidelines.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Lmt",
+          "example": 0
+        },
+        "make": {
+          "description": "Device make (e.g., “Apple”).",
+          "type": "string",
+          "x-go-name": "Make",
+          "example": "Samsung"
+        },
+        "model": {
+          "description": "Device model (e.g., “iPhone”).",
+          "type": "string",
+          "x-go-name": "Model",
+          "example": "Tizen TV 2017"
+        },
+        "os": {
+          "description": "Device operating system (e.g., “iOS”).",
+          "type": "string",
+          "x-go-name": "Os",
+          "example": "Tizen"
+        },
+        "ua": {
+          "description": "Browser user agent string.",
+          "type": "string",
+          "x-go-name": "Ua",
+          "example": "Mozilla/5.0 (SMART-TV; LINUX; Tizen 3.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/3.0 TV Safari/538.1"
+        }
+      },
+      "x-go-package": "github.com/adgear/sps-header-bidder/pkg/springServe"
+    },
+    "Geo": {
+      "description": "This object encapsulates various methods for specifying a geographic location. When subordinate to a\nDevice object, it indicates the location of the device which can also be interpreted as the user’s current\nlocation. When subordinate to a User object, it indicates the location of the user’s home base (i.e., not\nnecessarily their current location).",
+      "type": "object",
+      "properties": {
+        "country": {
+          "description": "Country code using ISO-3166-1-alpha-3.",
+          "type": "string",
+          "x-go-name": "Country",
+          "example": "USA"
+        },
+        "ipservice": {
+          "description": "Service or provider used to determine geolocation from IP address if applicable (i.e., type = 2).\n\n1 - ip2location\n2 - Neustar (Quova)\n3 - MaxMind\n4 - NetAcuity (Digital Element)",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Ipservice",
+          "example": 3
+        },
+        "lat": {
+          "description": "Latitude from -90.0 to +90.0, where negative is south.",
+          "type": "number",
+          "format": "double",
+          "x-go-name": "Lat",
+          "example": 37.751
+        },
+        "lon": {
+          "description": "Longitude from -180.0 to +180.0, where negative is west.",
+          "type": "number",
+          "format": "double",
+          "x-go-name": "Lon",
+          "example": -97.822
+        },
+        "type": {
+          "description": "Source of location data; recommended when passing lat/lon.\n\n1 - GPS/Location Services\n2 - IP Address\n3 - User provided (e.g., registration data)",
+          "type": "string",
+          "x-go-name": "Type",
+          "example": "2"
+        }
+      },
+      "x-go-package": "github.com/adgear/sps-header-bidder/pkg/springServe"
+    },
+    "HBRequest": {
+      "description": "A header-bidder listener request is structure that is sent to kafka as a event.",
+      "type": "object",
+      "title": "HBRequest",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "app": {
+          "$ref": "#/definitions/App"
+        },
+        "at": {
+          "description": "Auction type, where 1 = First Price, 2 = Second Price Plus.\nExchange-specific auction types can be defined using values\ngreater than 500.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "At",
+          "example": 1
+        },
+        "device": {
+          "$ref": "#/definitions/Device"
+        },
+        "ext": {
+          "description": "Extra Data for Samsung Ads",
+          "type": "object",
+          "properties": {
+            "sam_app_id": {
+              "description": "Samsung App ID\nHB App ID define in patner ad server.",
+              "type": "string",
+              "x-go-name": "Sam_APP_Id",
+              "example": "TEST-App-Id01"
+            },
+            "sam_hb_tag": {
+              "description": "Samsung HB Tag\nHB TagID define in patner ad server.",
+              "type": "string",
+              "x-go-name": "Sam_HB_Tag",
+              "example": "1234"
+            },
+            "sam_session_id": {
+              "description": "Samsung Session ID\nSession ID generated on App open.",
+              "type": "string",
+              "x-go-name": "Sam_Session_ID",
+              "example": "888888e2-621f-4f6a-844c-d21aed450c2a"
+            }
+          },
+          "x-go-name": "Ext"
+        },
+        "id": {
+          "description": "This is the ID for a HB Request",
+          "type": "string",
+          "x-go-name": "Id",
+          "example": "24234dfa-ef05-45fc-9dd8-7f37898294b6"
+        },
+        "imp": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Imp"
+          },
+          "x-go-name": "Imp"
+        },
+        "source": {
+          "description": "This object describes the nature and behavior of the entity that is the source of the bid request\nupstream from the exchange. The primary purpose of this object is to define post-auction or upstream\ndecisioning when the exchange itself does not control the final decision. A common example of this is\nheader bidding, but it can also apply to upstream server entities such as another RTB exchange, a\nmediation platform, or an ad server combines direct campaigns with 3rd party demand in decisioning.",
+          "type": "object",
+          "properties": {
+            "fd": {
+              "description": "Entity responsible for the final impression sale decision, where 0 = exchange, 1 = upstream source.",
+              "type": "integer",
+              "format": "int64",
+              "x-go-name": "Fd",
+              "example": 0
+            },
+            "pchain": {
+              "description": "Payment ID chain string containing embedded syntax described in the TAG Payment ID Protocol v1.0.",
+              "type": "string",
+              "x-go-name": "Pchain",
+              "example": "\"\""
+            }
+          },
+          "x-go-name": "Source"
+        },
+        "tmax": {
+          "description": "This parameter allows the timeout limit for SpotX to respond to be changed to best fit your desired user experience.\nValues are in milliseconds with a max value of 650 being allowed.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Tmax",
+          "example": 2800
+        },
+        "user": {
+          "description": "This object contains information known or derived about the human user of the device (i.e., the\naudience for advertising). The user id is an exchange artifact and may be subject to rotation or other\nprivacy policies. However, this user ID must be stable long enough to serve reasonably as the basis for\nfrequency capping and retargeting.",
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Exchange-specific ID for the user. At least one of id or buyeruid is recommended.",
+              "type": "string",
+              "x-go-name": "Id",
+              "example": "575883e2-8fb1-4147-b6d3-0a5896b94e54"
+            }
+          },
+          "x-go-name": "User"
+        }
+      },
+      "x-go-package": "github.com/adgear/sps-header-bidder/pkg/springServe"
+    },
+    "Imp": {
+      "description": "This is impression of user in HB Request",
+      "type": "object",
+      "properties": {
+        "bidfloor": {
+          "description": "Minimum bid for this impression expressed in CPM.",
+          "type": "number",
+          "format": "double",
+          "x-go-name": "BidFloor",
+          "example": 0.01
+        },
+        "id": {
+          "description": "Impression ID for User's Impression on a Ad.",
+          "type": "string",
+          "x-go-name": "Id",
+          "example": "1"
+        },
+        "secure": {
+          "description": "Flag to indicate if the impression requires secure HTTPS URL\ncreative assets and markup, where 0 = non-secure, 1 = secure.\nIf omitted, the secure state is unknown, but non-secure HTTP\nsupport can be assumed.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Secure",
+          "example": 1
+        },
+        "tagid": {
+          "description": "Identifier for specific ad placement or ad tag that was used to\ninitiate the auction. This can be useful for debugging of any\nissues, or for optimization by the buyer.",
+          "type": "string",
+          "x-go-name": "Tagid",
+          "example": "666310"
+        },
+        "video": {
+          "$ref": "#/definitions/Video"
+        }
+      },
+      "x-go-package": "github.com/adgear/sps-header-bidder/pkg/springServe"
+    },
+    "Video": {
+      "type": "object",
+      "properties": {
+        "h": {
+          "description": "Height of the video player in device independent pixels (DIPS).",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "H",
+          "example": 1080
+        },
+        "linearity": {
+          "description": "Indicates if the impression must be linear, nonlinear, etc. If none specified, assume all are allowed.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Linearity",
+          "example": 1
+        },
+        "maxbitrate": {
+          "description": "Maximum bit rate in Kbps.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Maxbitrate",
+          "example": 280000
+        },
+        "maxduration": {
+          "description": "Maximum video ad duration in seconds.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Maxduration",
+          "example": 300
+        },
+        "mimes": {
+          "description": "Content MIME types supported (e.g., “video/x-ms-wmv”, “video/mp4”).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Mimes",
+          "example": [
+            "video/mp4",
+            "video/ogg",
+            "video/webm"
+          ]
+        },
+        "minbitrate": {
+          "description": "Minimum bit rate in Kbps.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Minbitrate",
+          "example": 1
+        },
+        "minduration": {
+          "description": "Minimum video ad duration in seconds.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Minduration",
+          "example": 1
+        },
+        "protocols": {
+          "description": "Array of supported video protocols.\n\n1 - VAST 1.0\n2 - VAST 2.0\n3 - VAST 3.0\n4 - VAST 1.0 Wrapper\n5 - VAST 2.0 Wrapper\n6 - VAST 3.0 Wrapper\n7 - VAST 4.0\n8 - VAST 4.0 Wrapper\n9 - DAAST 1.0\n10 - DAAST 1.0 Wrapper",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "Protocols",
+          "example": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "sequence": {
+          "description": "If multiple ad impressions are offered in the same bid request,\nthe sequence number will allow for the coordinated delivery\nof multiple creatives.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Sequence",
+          "example": 1
+        },
+        "startdelay": {
+          "description": "Indicates the start delay in seconds for pre-roll, mid-roll, or post-roll ad placements.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Startdelay",
+          "example": -1
+        },
+        "w": {
+          "description": "Width of the video player in device independent pixels (DIPS).",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "W",
+          "example": 1920
+        }
+      },
+      "x-go-package": "github.com/adgear/sps-header-bidder/pkg/springServe"
+    }
+  }
+}

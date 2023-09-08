@@ -1,0 +1,114 @@
+---
+name: RepoChecks
+
+on:
+  push:
+    tags:
+      - "*"
+    branches:
+      - main
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: [ self-hosted, ubuntu-22.04-medium ]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Disabling shallow clone is recommended for improving relevancy of reporting.
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.19.x'
+
+      - name: Install dependencies
+        run: |
+          go version
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1
+
+      - name: Get token
+        id: get_token
+        uses: machine-learning-apps/actions-app-token@0.21
+        with:
+          APP_PEM: ${{ secrets.PRIVATE_REPO_APP_PEM }}
+          APP_ID: ${{ secrets.PRIVATE_REPO_APP_ID }}
+
+      - name: Setup private repo access
+        run: git config --global url."https://oauth2:${TOKEN}@github.com".insteadOf https://github.com
+        env:
+          TOKEN: ${{ steps.get_token.outputs.app_token }}
+
+      - name: Run golangci-lint
+        run: golangci-lint run --timeout 2m
+
+      - name: Run test-with-coverage
+        run: make test-with-report
+
+      - name: Upload Test Coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: |
+               ./coverage/coverage.out
+               ./coverage/test-report.json
+  hadolint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+    - name: Checking Dockerfile with Hadolint
+      uses: hadolint/hadolint-action@v2.0.0
+
+  sonarqube:
+    runs-on: [ self-hosted, ubuntu-22.04-medium ]
+    needs: tests
+    if: ${{ github.ref == 'refs/heads/main' }}
+
+    permissions: # permissions required by hashicorp/vault-action
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Disabling shallow clone is recommended for improving relevancy of reporting.
+
+      - name: Fetch coverage files
+        uses: actions/download-artifact@v3
+        with:
+          name: coverage
+          path: ./coverage
+
+      - name: Fetch SonarQube secrets
+        uses: hashicorp/vault-action@v2.4.3
+        with:
+          method: jwt                               # leave as is
+          path: adgear-github-actions               # leave as is (dedicated vault role for github actions)
+          url: https://vault.int.adgear.com:8200    # leave as is (production vault instance)
+          secrets: 
+            | # Fetch SONAR_TOKEN dedicated to the component group, SONAR_HOST_URL is shared among all
+            secret/ep/shared/sonarqube/host_url value | SONAR_HOST_URL;
+            secret/cg-sps/shared/sonarqube/token value | SONAR_TOKEN;
+
+      - name: SonarQube Scan # Triggering SonarQube analysis as results of it are required by Quality Gate check
+        uses: sonarsource/sonarqube-scan-action@v1.2.0
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+
+      - name: SonarQube Quality Gate check # Check the Quality Gate status
+        id: sonarqube-quality-gate-check
+        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
+        timeout-minutes: 5 # Force to fail step after specific time.
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+        continue-on-error: true # For now, we want to see the Quality Gate result but don't want to fail the job
+        # Optionally you can use the output from the Quality Gate in another step.
+        # The possible outputs of the `quality-gate-status` variable are `PASSED`, `WARN` or `FAILED`.
+
+      - name: "SonarQube Quality Gate Status"
+        run: echo "The Quality Gate status is ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"

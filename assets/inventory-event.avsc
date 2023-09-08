@@ -1,0 +1,28 @@
+{
+  "name": "InventoryEvent",
+  "type": "record",
+  "namespace": "com.samsung.events",
+  "fields": [
+    { "name": "bidRequestId", "type": "string"},
+    { "name": "timestamp", "type": "string", "default": "null"  },
+    { "name": "samsungSessionId", "type": "string", "default": "null" },
+    { "name": "samsungAppId", "type": "string", "default": "null"},
+    { "name": "samsungHbTag", "type": "int" },
+    { "name": "publicaTagId", "type": "int" },
+    { "name": "contentGenre", "type": "string", "default": "null" },
+    { "name": "contentCatIab", "type": "string", "default": "null" },
+    { "name": "isLive", "type": "int" },
+    { "name": "ip", "type": "string", "default": "null" },
+    { "name": "ua", "type": "string", "default": "null" },
+    { "name": "deviceId", "type": "string", "default": "null" },
+    { "name": "lat", "type": "int" },
+    { "name": "coppa", "type": "int" },
+    { "name": "gdpr", "type": "int" },
+    { "name": "usPrivacy", "type": "string", "default": "null" },
+    { "name": "gdprConsent", "type": "string", "default": "null" },
+    { "name": "appBundle", "type": "string", "default": "null" },
+    { "name": "appName", "type": "string", "default": "null" },
+    { "name": "requestSlots", "type": "int"},
+    { "name": "requestDuration", "type": "int"}
+  ]
+}

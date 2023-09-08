@@ -1,0 +1,12 @@
+{
+	"type": "record",
+	"name": "AdEvent",
+	"fields": [
+		{ "name": "type", "type": "string",  "default": "OpenRTB"},
+		{ "name": "version", "type": "string", "default": "2.5" },
+		{ "name": "headers", "type": "string", "default": "" },
+		{ "name": "qs", "type": "string", "default": "" },
+		{ "name": "body", "type": "string", "default": "" },
+		{ "name": "path", "type": "string", "default": ""}
+	]
+}

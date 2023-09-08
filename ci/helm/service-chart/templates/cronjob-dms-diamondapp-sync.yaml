@@ -1,0 +1,51 @@
+{{- if .Values.DMSDiamondCron.enabled -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dms-diamondapp-sync
+  labels:
+    {{- include "service.labels" . | nindent 4 }}
+    {{- include "shared.labels" . | nindent 4 }}
+spec:
+  schedule: "{{ .Values.DMSDiamondCron.schedule }}"
+  {{- with .Values.DMSDiamondCron.concurrencyPolicy }}
+  concurrencyPolicy: {{ . }}
+  {{- end }}
+  {{- with .Values.DMSDiamondCron.failedJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ . }}
+  {{- end }}
+  {{- with .Values.DMSDiamondCron.successfulJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ . }}
+  {{- end }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          {{- with .Values.global.shared.labels }}
+          labels:
+            {{- toYaml . | nindent 122 }}
+          {{- end }}
+          {{- with .Values.DMSDiamondCron.annotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: dms-diamondapp-sync
+              image: "{{ .Values.cron_image.repository }}:{{ .Values.cron_image.tag }}"
+              imagePullPolicy: IfNotPresent
+              command: 
+              - /usr/bin/bash
+              args:
+              - /root/scripts/dms-diamondapp-sync.sh
+              volumeMounts:
+              - name: configvol
+                mountPath: /root/scripts
+              resources:
+                {{- toYaml .Values.cronresources | nindent 16 }}
+          volumes:
+          - name: configvol
+            configMap:
+              name: {{ include "service.fullname" . }}-cron-dms-diamondapp-sync-configmap
+{{- end }}

@@ -1,0 +1,104 @@
+name: Main CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - feature/SPS-655-github-actions
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  deploy-production-from-main:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout main repo
+      uses: actions/checkout@v2
+      with:
+        ref: main
+
+    # Set up Go environment
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: '^1.17'
+
+    - name: Check Go version
+      run: go version
+
+    - name: Checkout common-tasks-extended-repo
+      uses: actions/checkout@v2
+      with:
+        repository: 'your-org/common-tasks-extended-repo'
+        ref: 'main' # or whatever branch you prefer
+
+    # Build the Go binaries
+    - name: Build Go binaries
+      run: go build ./...
+
+    # Here's where you'd replicate the 'helm-build' task
+    - name: Helm Build
+      run: |
+        # Your helm build commands here
+
+    # Here's where you'd replicate the 'extract-docker-linted-info' task
+    - name: Extract Docker Info
+      run: |
+        # Your Docker info extraction commands here
+
+    # Here's where you'd replicate the 'deploy-to-prod-from-main' task
+    - name: Deploy to Prod from Main
+      run: |
+        # Your deployment commands here
+      env:
+        HT_PASSWD: ${{ secrets.HTPASSWD_PROD }}
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        PAGERDUTY_SERVICE_KEY: ${{ secrets.PAGERDUTY_SERVICE_KEY }}
+
+    # Here's where you'd replicate the 'send-alert-for-manual-gates' task
+    - name: Send Alert for Manual Gates
+      run: |
+        # Your manual gate alerting commands here
+
+    # Here's where you'd replicate the 'create-incident' task
+    - name: Create Incident
+      run: |
+        # Your incident creation commands here
+
+    # Here's where you'd replicate the 'resolve-incident' task
+    - name: Resolve Incident
+      run: |
+        # Your incident resolution commands here
+      env:
+        PAGERDUTY_SERVICE_KEY: ${{ secrets.PAGERDUTY_SERVICE_KEY }}
+
+    # Here's where you'd replicate the 'approve-deploy' task
+    - name: Approve Deploy
+      run: |
+        # Your deployment approval commands here
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    # Here's where you'd replicate the 'slack-notify-on-deploy' task
+    - name: Slack Notify on Deploy
+      run: |
+        # Your Slack notification commands here
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    # Here's where you'd replicate the 'clean-up' task
+    - name: Clean Up
+      run: |
+        # Your clean-up commands here
+
+    # Additional steps for test reports, metrics or any other post-deploy activities
+    - name: Post-Deploy Steps
+      run: |
+        # Additional commands here
+
+    # This is to indicate that the CI/CD has finished successfully
+    - name: Final Step
+      run: echo "CI/CD Pipeline completed successfully."
+
+  

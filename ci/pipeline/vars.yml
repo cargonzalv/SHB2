@@ -1,0 +1,8 @@
+github-repo: adgear/sps-header-bidder 
+service-name: sps-header-bidder
+cluster-url-staging: https://rancher-management.k8s.adgear.com/k8s/clusters/c-qfkfg
+k8s-namespace-staging: sps-header-bidder
+cluster-url-canary: https://rancher-management.k8s.adgear.com/k8s/clusters/c-n8fhk 
+k8s-namespace-canary: sps-header-bidder-canary
+cluster-url-production: https://rancher-management.k8s.adgear.com/k8s/clusters/c-n8fhk 
+k8s-namespace-production: sps-header-bidder

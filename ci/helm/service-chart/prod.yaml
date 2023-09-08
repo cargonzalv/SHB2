@@ -1,0 +1,106 @@
+global:
+  shared:
+    labels:
+      Environment: prod
+      cluster: use1-rprod
+      datacenter: use1-rprod.k8s.adgear.com
+      alerting: nopage
+
+replicaCount: 2
+
+service:
+  type: NodePort
+  port: 8080
+  nodePort: 31101
+  targetPort: 8080
+  appPort: 8085
+  kafkaPort: 8087
+
+image:
+  repository: adgear-docker.jfrog.io/adgear/sps-header-bidder
+  tag: v0.0.40
+
+kafkafetcherimage:
+  repository: adgear-docker.jfrog.io/adgear/go-commons-kafka-fetcher
+  tag: v0.0.5
+
+cron_image:
+  repository: adgear-docker.jfrog.io/adgear/awscli
+  tag: 0.2.1
+
+ingress:
+  enabled: true
+  class: alb
+  annotations:
+   alb.ingress.kubernetes.io/target-node-labels: "node-role.kubernetes.io/worker=true"
+   alb.ingress.kubernetes.io/group.name: sanpublic1
+   alb.ingress.kubernetes.io/healthcheck-path: /health/liveness
+   adgear.com/Environment: prod
+  hosts:
+    - host: sps-header-bidder.adgear.com
+      paths: ["/"]
+    - host: sdk-header-bidder.adgear.com
+      paths: ["/"]
+  tls:
+    - hosts:
+      - sps-header-bidder.use1-rprod.k8s.adgear.com
+      - sps-header-bidder.adgear.com
+      - sdk-header-bidder.adgear.com
+      secretName: sps-header-bidder-tls
+
+environment_vars:
+  ENVIRONMENT: "prod"
+
+vault:
+  htpasswd: "$(secret/concourse/tizen-ads-sdk/sps-header-bidder/htpasswd-prod/ htpasswd)"
+
+ReportingCron:
+  enabled: "true"
+  schedule: "10 2 * * *"
+  concurrencyPolicy: ""
+  failedJobsHistoryLimit: "3"
+  successfulJobsHistoryLimit: "3"
+  annotations:
+    iam.amazonaws.com/role: arn:aws:iam::652057145661:role/ad-sdk
+
+DMSDiamondCron:
+  enabled: "true"
+  schedule: "30 1 * * *"
+  concurrencyPolicy: ""
+  failedJobsHistoryLimit: "3"
+  successfulJobsHistoryLimit: "3"
+  annotations:
+    iam.amazonaws.com/role: arn:aws:iam::652057145661:role/ad-sdk
+
+monitoring:
+  enabled: true
+
+kafka_monitoring:
+  enabled: true
+
+kafka_topics:
+  - sps.adevent
+  - sps.inventoryevent
+  - sps.sessionevent
+
+vmprobe:
+  enabled: true
+  api_url: https://sps-header-bidder.adgear.com/health/readiness
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

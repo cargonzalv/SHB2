@@ -1,0 +1,1044 @@
+# instance:       concourse.int.adgear.com
+# pipeline_name:  service-deployment
+# team:           backend
+# vars: 
+#   - service-name - service name
+#  - github-repo - path to the github repo
+#  - github-repo-name - name of the github repo
+---
+resource_types:
+  - name: artifactory
+    type: docker-image
+    source:
+      repository: pivotalservices/artifactory-resource
+
+  - name: pull-request
+    source:
+      repository: teliaoss/github-pr-resource
+    type: docker-image
+
+  - name: helm
+    type: docker-image
+    source:
+      repository: ghcr.io/typositoire/concourse-helm3-resource 
+      tag: v1.26.1
+
+  - name: slack-notification
+    type: docker-image
+    source:
+      repository: cfcommunity/slack-notification-resource
+
+resources:
+  # Resource to detect new Git Tags in repo
+  - name: main
+    type: git
+    icon: github
+    source:
+      private_key: ((adgear-concourse.ssh_private_key))
+      uri: git@github.com:((github-repo)).git
+      branch: main
+      tag_filter: "*.*.*"
+
+  # Resource with common scripts
+  - name: common-tasks-repo
+    type: git
+    icon: github
+    source:
+      private_key: ((adgear-concourse.ssh_private_key))
+      uri: git@github.com:adgear/common-tasks.git
+      branch: master
+
+  # Resource with common scripts extended
+  - name: common-tasks-extended-repo
+    type: git
+    icon: github
+    source:
+      private_key: ((adgear-concourse.ssh_private_key))
+      uri: git@github.com:adgear/common-tasks-extended.git
+      branch: main
+
+  # Resource to detect new Git Pull Request and updates 
+  - name: repo-pr
+    type: pull-request
+    icon: github
+    source:
+      access_token: ((adgear-concourse.access_token))
+      repository: ((github-repo))
+
+  # Resource to send Slack Message to Nsync Team
+  - name: notify-slack
+    type: slack-notification
+    icon: slack
+    source:
+      url: ((alerting.slack_webhookURL))
+
+  # Resource of service artifactory
+  - name: pr-image
+    type: docker-image
+    icon: docker
+    source:
+      repository: adgear-docker.jfrog.io/adgear/((service-name))
+      tag: "pr-review"
+      username: ((artifactory.username))
+      password: ((artifactory.password))
+
+  # Resource of service artifactory for production environment
+  - name: production-image
+    type: docker-image
+    icon: docker
+    source:
+      repository: adgear-docker.jfrog.io/adgear/((service-name))
+      tag: "main"
+      username: ((artifactory.username))
+      password: ((artifactory.password))
+
+  # Resource of helm chart to deploy k8s resources into staging environment
+  - name: helm-chart-staging
+    type: helm
+    icon: ship-wheel
+    source:
+      private_key: ((adgear-concourse.ssh_private_key))
+      release: ((service-name))
+      namespace: ((k8s-namespace-staging))
+      cluster_url: ((cluster-url-staging)) 
+      cluster_ca_base64: ((rancher-concourse-deployer.cluster_ca_base64))
+      token: ((rancher-concourse-deployer.token))
+      repos:
+        - name: adgear-helm
+          url: https://adgear.jfrog.io/adgear/adgear-helm
+          username: ((artifactory.username))
+          password: ((artifactory.password))
+
+  # Resource of helm chart to deploy k8s resources into Canary environment
+  - name: helm-chart-canary
+    type: helm
+    icon: ship-wheel
+    source:
+      private_key: ((adgear-concourse.ssh_private_key))
+      release: ((service-name)) 
+      namespace: ((k8s-namespace-canary))
+      cluster_url: ((cluster-url-canary)) 
+      cluster_ca_base64: ((rancher-concourse-deployer.cluster_ca_base64))
+      token: ((rancher-concourse-deployer.token))
+      repos:
+        - name: adgear-helm
+          url: https://adgear.jfrog.io/adgear/adgear-helm
+          username: ((artifactory.username))
+          password: ((artifactory.password))
+
+  # Resource of helm chart to deploy k8s resources into Production environment
+  - name: helm-chart-production
+    type: helm
+    icon: ship-wheel
+    source:
+      private_key: ((adgear-concourse.ssh_private_key))
+      release: ((service-name)) 
+      namespace: ((k8s-namespace-production))
+      cluster_url: ((cluster-url-production))
+      cluster_ca_base64: ((rancher-concourse-deployer.cluster_ca_base64))
+      token: ((rancher-concourse-deployer.token))
+      repos:
+        - name: adgear-helm
+          url: https://adgear.jfrog.io/adgear/adgear-helm
+          username: ((artifactory.username))
+          password: ((artifactory.password))
+
+jobs:
+  ######################################################################################
+  # Eunit tests
+  ######################################################################################
+  - name: check-code-eunit
+    plan:
+      - get: common-tasks-extended-repo
+
+      - in_parallel:
+          fail_fast: true
+          steps:
+            - do:
+                # Set Job trigger when detects a new PR or commit to a PR
+                # when check-code-linter passed
+                - get: repo-pr
+                  trigger: true
+                  version: every
+
+                # Send Git check an Pending response
+                - put: repo-pr
+                  params:
+                    path: repo-pr
+                    status: PENDING
+                    context: check-code-eunit
+
+      # Task to check quality of code: eunit tests
+      - task: check-code-eunit
+        file: common-tasks-extended-repo/golang-make/task.yml
+        input_mapping: {repo: repo-pr}
+        params:
+          DEBUG: true
+          ACTION: eunit
+
+    # If code eunit tests are successfull
+    on_success:
+      in_parallel:
+        fail_fast: false
+        steps:
+          # Send Git check an Success response
+          - put: repo-pr
+            params:
+              path: repo-pr
+              status: SUCCESS
+              context: check-code-eunit
+
+    # If code eunit tests have an error
+    on_error:
+      in_parallel:
+        fail_fast: false
+        steps:
+          # Send Git check an Error response
+          - put: repo-pr
+            params:
+              path: repo-pr
+              status: ERROR
+              context: check-code-eunit
+     
+    # If code eunit tests failed to run
+    on_failure:
+      in_parallel:
+        fail_fast: false
+        steps:
+          # Send Git check an Fail response
+          - put: repo-pr
+            params:
+              path: repo-pr
+              status: FAILURE
+              context: check-code-eunit
+     
+    # If code eunit tests were aborted
+    on_abort:
+      in_parallel:
+        fail_fast: false
+        steps:
+          
+          # Send Git check an Error response
+          - put: repo-pr
+            params:
+              path: repo-pr
+              status: ERROR
+              context: check-code-eunit
+
+  ######################################################################################
+  # Docker linter
+  ######################################################################################
+  - name: check-docker-linter
+    plan:
+      - get: common-tasks-extended-repo
+
+      - in_parallel:
+          fail_fast: true
+          steps:
+            - do:
+                # Set Job trigger when detects a new PR or commit to a PR
+                # when check-code-linter passed
+                - get: repo-pr
+                  trigger: true
+                  version: every
+
+                # Send Git check an Pending response
+                - put: repo-pr
+                  params:
+                    path: repo-pr
+                    status: PENDING
+                    context: check-docker-linter
+
+      # Task to check quality of docker: run hadolint
+      - task: check-docker-linter
+        file: common-tasks-extended-repo/docker-linter/task.yml
+        input_mapping: {repo: repo-pr}
+        params:
+          DEBUG: true
+
+    # If code eunit tests are successfull
+    on_success:
+      in_parallel:
+        fail_fast: false
+        steps:
+          # Send Git check an Success response
+          - put: repo-pr
+            params:
+              path: repo-pr
+              status: SUCCESS
+              context: check-docker-linter
+
+    # If code eunit tests have an error
+    on_error:
+      in_parallel:
+        fail_fast: false
+        steps:
+          # Send Git check an Error response
+          - put: repo-pr
+            params:
+              path: repo-pr
+              status: ERROR
+              context: check-docker-linter
+
+    # If code eunit tests failed to run
+    on_failure:
+      in_parallel:
+        fail_fast: false
+        steps:
+          # Send Git check an Fail response
+          - put: repo-pr
+            params:
+              path: repo-pr
+              status: FAILURE
+              context: check-docker-linter
+
+    # If code eunit tests were aborted
+    on_abort:
+      in_parallel:
+        fail_fast: false
+        steps:
+
+          # Send Git check an Error response
+          - put: repo-pr
+            params:
+              path: repo-pr
+              status: ERROR
+              context: check-docker-linter
+
+  ######################################################################################
+  # Run build image from PR
+  ######################################################################################
+  - name: build-image-from-pr
+    plan:
+      - get: common-tasks-repo
+      - get: common-tasks-extended-repo
+
+      # Set Job trigger when check-code-eunit passed
+      - get: repo-pr
+        passed: [check-code-eunit, check-docker-linter]
+        trigger: true
+        version: every
+
+      - get: main
+
+      - do:
+          - put: repo-pr
+            params:
+              path: repo-pr
+              status: pending
+              context: build-image-from-pr
+
+          # Extract PR metadata; task: extract-pr-metadata
+          - task: extract-pr-metadata
+            file: common-tasks-extended-repo/extract-pr-meta/task.yml
+            input_mapping:
+              repo: repo-pr
+            output_mapping:
+              out: metadata
+            params:
+              DEBUG: true
+              ADDITIONAL_TAGS: "pr-review"
+
+          # Extract main metadata; task: extract-main-metadata
+          - task: extract-main-metadata
+            file: common-tasks-extended-repo/extract-pr-meta/task.yml
+            input_mapping:
+              repo: main
+            output_mapping:
+              out: main_metadata
+            params:
+              DEBUG: true
+              
+          # Build image; task: build-image-pr
+          - task: build-image-pr
+            file: common-tasks-repo/build-task/latest/build-task.yaml
+            input_mapping:
+              metadata: metadata
+              source: repo-pr
+              context: build-image-from-pr
+            on_failure:
+              put: repo-pr
+              params:
+                path: repo-pr
+                status: failure
+                context: build-image-from-pr
+            on_success:
+              put: repo-pr
+              params:
+                path: repo-pr
+                status: success
+                context: build-image-from-pr
+            params:
+              BUILD_ARG_DELIVERY_BUILD_DATE: "$(date -Is)"
+              BUILD_ARG_DELIVERY_GIT_BRANCH: "$(cat metadata/head_name_safe)"
+              BUILD_ARG_DELIVERY_GIT_PRIV_TAG: "$(cat main_metadata/tag)"
+              BUILD_ARG_DELIVERY_GIT_TAG: "$(cat metadata/tag)"
+              BUILD_ARG_DELIVERY_GIT_HASH: "$(cat metadata/head_sha)"
+              BUILD_ARG_DELIVERY_HELM_TAG: "$(cat metadata/short_hash)"
+              BUILD_ARG_DELIVERY_ADDITIONAL_TAGS: "$(cat metadata/additional_tags)"
+              BUILD_ARG_DELIVERY_SERVICE_NAME: ((service-name))
+              BUILD_ARG_build_type: build
+              BUILDKIT: "1"
+              USERNAME: ((artifactory.username))
+              PASSWORD: ((artifactory.password))
+              REPOSITORY: adgear-docker.jfrog.io/adgear/((service-name))
+              SAVE_ARTIFACT: true
+              SSH_KEY_0: ((adgear-concourse.ssh_private_key))
+              DEBUG: true
+            privileged: true
+
+          # Push image to the repo; put: pr-image
+          - put: pr-image
+            params:
+              load_file: image/image.tar
+              load_repository: adgear-docker.jfrog.io/adgear/((service-name))
+              tag_file: metadata/short_hash
+              additional_tags: metadata/additional_tags
+              tag_as_latest: true
+
+          # Notify via Slack; put: notify-slack
+          - put: notify-slack
+            params:
+              always_notify: true
+              text: |
+                :docker: ((service-name)) build ('$TEXT_FILE_CONTENT') was released
+                Check out build from open pr <$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|#$BUILD_NAME>
+              text_file: metadata/title
+
+  ######################################################################################
+  # Deploy to staging environment from pr before merging
+  ######################################################################################
+  - name: deploy-staging-from-pr
+    serial: true
+    plan:
+      - get: pr-image
+        params:
+          save: true
+
+      - get: common-tasks-extended-repo
+      - get: repo-pr
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: repo-pr
+        output_mapping:
+          out: chart
+        params:
+          DEBUG: true
+
+      # Extract docker info; task: extract-docker-linted-info
+      - task: extract-docker-linted-info
+        file: common-tasks-extended-repo/extract-docker-linted-info/task.yml
+        input_mapping:
+          image: pr-image
+        output_mapping:
+          out: info
+        params:
+          DEBUG: true
+
+      # Deploy to staging; task: deploy-to-staging-from-pr
+      - put: deploy-to-staging-from-pr
+        resource: helm-chart-staging
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/dev.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: info/tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-staging.htpasswd))
+
+            - key: vault.slack_webhookURL
+              value: ((alerting.slack_webhookURL))
+
+            - key: vault.pagerduty_serviceKey
+              value: ((alerting.pagerduty_serviceKey))
+  ######################################################################################
+  # Deploy to canary environment from pr before merging
+  ######################################################################################
+  - name: deploy-canary-from-pr
+    serial: true
+    plan:
+      - get: pr-image
+        params:
+          save: true
+
+      - get: common-tasks-extended-repo
+      - get: repo-pr
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: repo-pr
+        output_mapping:
+          out: chart 
+        params:
+          DEBUG: true
+
+      # Extract docker info; task: extract-docker-linted-info
+      - task: extract-docker-linted-info
+        file: common-tasks-extended-repo/extract-docker-linted-info/task.yml
+        input_mapping:
+          image: pr-image
+        output_mapping:
+          out: info
+        params:
+          DEBUG: true
+
+      # Deploy to canary; task: deploy-canary-from-pr
+      - put: deploy-to-canary-pr
+        resource: helm-chart-canary
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/canary.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: info/tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-canary.htpasswd))
+
+            - key: vault.slack_webhookURL
+              value: ((alerting.slack_webhookURL))
+
+            - key: vault.pagerduty_serviceKey
+              value: ((alerting.pagerduty_serviceKey))
+
+            - key: vault.CA_CERT
+              value: ((canary.ca_cert))
+
+            - key: vault.PRIV_PEM
+              value: ((canary.priv_pem))
+
+            - key: vault.PUB_PEM
+              value: ((canary.pub_pem))
+  ######################################################################################
+  # Run build image from main
+  ######################################################################################
+  - name: build-image-from-main
+    plan:
+      - get: common-tasks-repo
+      - get: common-tasks-extended-repo
+
+      # Set Job trigger when PR is merged to main and tagged 
+      - get: main
+        trigger: true
+        version: every
+
+      - do:
+          # Extract PR metadata; task: extract-pr-metadata
+          - task: extract-main-metadata
+            file: common-tasks-extended-repo/extract-pr-meta/task.yml
+            input_mapping:
+              repo: main
+            output_mapping:
+              out: metadata
+            params:
+              ADDITIONAL_TAGS: "main"
+              DEBUG: true
+
+          # Build image; task: build-image-main
+          - task: build-image-main
+            file: common-tasks-repo/build-task/latest/build-task.yaml
+            input_mapping:
+              metadata: metadata
+              source: main
+            params:
+              BUILD_ARG_DELIVERY_BUILD_DATE: "$(date -Is)"
+              BUILD_ARG_DELIVERY_GIT_BRANCH: "main"
+              BUILD_ARG_DELIVERY_GIT_PRIV_TAG: "$(cat metadata/priv_tag)"
+              BUILD_ARG_DELIVERY_GIT_TAG: "$(cat metadata/tag)"
+              BUILD_ARG_DELIVERY_GIT_HASH: "$(cat metadata/head_sha)"
+              BUILD_ARG_DELIVERY_HELM_TAG: "$(cat metadata/tag)"
+              BUILD_ARG_DELIVERY_ADDITIONAL_TAGS: "$(cat metadata/tag)"
+              BUILD_ARG_DELIVERY_SERVICE_NAME: ((service-name))
+              BUILD_ARG_build_type: build
+              BUILDKIT: "1"
+              USERNAME: ((artifactory.username))
+              PASSWORD: ((artifactory.password))
+              REPOSITORY: adgear-docker.jfrog.io/adgear/((service-name))
+              SAVE_ARTIFACT: true
+              SSH_KEY_0: ((adgear-concourse.ssh_private_key))
+              DEBUG: true
+            privileged: true
+
+          # Push image to the repo; put: production-image
+          - put: production-image
+            params:
+              load_file: image/image.tar
+              load_repository: adgear-docker.jfrog.io/adgear/((service-name))
+              tag_file: metadata/tag
+              additional_tags: metadata/additional_tags
+              tag_as_latest: true
+
+          # Notify via Slack; put: notify-slack
+          - put: notify-slack
+            params:
+              always_notify: true
+              text: |
+                :docker: ((service-name)) tagged $TEXT_FILE_CONTENT was released
+                Check out build <$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|#$BUILD_NAME>
+              text_file: metadata/tag
+
+  ######################################################################################
+  # Deploy to staging environment from main after merging
+  ######################################################################################
+  - name: deploy-staging-from-main
+    serial: true
+    plan:
+      - get: production-image
+        params:
+          save: true
+
+      - get: common-tasks-extended-repo
+      - get: main
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: main
+        output_mapping:
+          out: chart 
+        params:
+          DEBUG: true
+
+      # Extract docker info; task: extract-docker-linted-info
+      - task: extract-docker-linted-info
+        file: common-tasks-extended-repo/extract-docker-linted-info/task.yml
+        input_mapping:
+          image: production-image
+        output_mapping:
+          out: info
+        params:
+          DEBUG: true
+
+      # Deploy to staging; task: deploy-staging-from-main
+      - put: deploy-to-staging-from-main
+        resource: helm-chart-staging
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/dev.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: info/tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-staging.htpasswd))
+
+            - key: vault.slack_webhookURL
+              value: ((alerting.slack_webhookURL))
+
+            - key: vault.pagerduty_serviceKey
+              value: ((alerting.pagerduty_serviceKey))
+  ######################################################################################
+  # Deploy to canary environment from main after merging
+  ######################################################################################
+  - name: deploy-canary-from-main
+    serial: true
+    plan:
+      - get: production-image
+        params:
+          save: true
+
+      - get: common-tasks-extended-repo
+      - get: main
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: main
+        output_mapping:
+          out: chart 
+        params:
+          DEBUG: true
+
+      # Extract docker info; task: extract-docker-linted-info
+      - task: extract-docker-linted-info
+        file: common-tasks-extended-repo/extract-docker-linted-info/task.yml
+        input_mapping:
+          image: production-image
+        output_mapping:
+          out: info
+        params:
+          DEBUG: true
+
+      # Deploy to canary; task: deploy-to-canary-from-main
+      - put: deploy-to-canary-from-main
+        resource: helm-chart-canary
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/canary.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: info/tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-canary.htpasswd))
+
+            - key: vault.slack_webhookURL
+              value: ((alerting.slack_webhookURL))
+
+            - key: vault.pagerduty_serviceKey
+              value: ((alerting.pagerduty_serviceKey))
+
+            - key: vault.CA_CERT
+              value: ((canary.ca_cert))
+
+            - key: vault.PRIV_PEM
+              value: ((canary.priv_pem))
+
+            - key: vault.PUB_PEM
+              value: ((canary.pub_pem))
+  ######################################################################################
+  # Deploy to production environment from main after merging
+  ######################################################################################
+  - name: deploy-production-from-main
+    serial: true
+    plan:
+      - get: main
+      - get: common-tasks-extended-repo
+      - get: production-image
+        version: every
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: main
+        output_mapping:
+          out: chart 
+        params:
+          DEBUG: true
+
+      # Extract docker info; task: extract-docker-linted-info
+      - task: extract-docker-linted-info
+        file: common-tasks-extended-repo/extract-docker-linted-info/task.yml
+        input_mapping:
+          image: production-image
+        output_mapping:
+          out: info
+        params:
+          DEBUG: true
+
+      # Deploy to canary; task: deploy-to-prod-from-main
+      - put: deploy-to-prod-from-main
+        resource: helm-chart-production
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/prod.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: info/tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-prod.htpasswd))
+
+            - key: vault.slack_webhookURL
+              value: ((alerting.slack_webhookURL))
+
+            - key: vault.pagerduty_serviceKey
+              value: ((alerting.pagerduty_serviceKey))
+  ######################################################################################
+  # Rollback to previous release in dev environment before merging pr
+  ######################################################################################
+  - name: rollback-staging-before-merging
+    serial: true
+    plan:
+      - get: main
+      - get: common-tasks-extended-repo
+
+      - get: production-image
+        params:
+          save: true
+
+      - get: repo-pr
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: repo-pr
+        output_mapping:
+          out: chart 
+        params:
+          DEBUG: true
+
+      # Extract main metadata; task: extract-main-metadata
+      - task: extract-main-metadata
+        file: common-tasks-extended-repo/extract-pr-meta/task.yml
+        input_mapping:
+          repo: main
+        output_mapping:
+          out: metadata
+        params:
+          ADDITIONAL_TAGS: "main"
+          DEBUG: true
+
+      # Deploy to staging; task: rollback-staging-before-merging
+      - put: deploy-to-staging-from-pr
+        resource: helm-chart-staging
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/dev.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: metadata/tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-staging.htpasswd))
+  ######################################################################################
+  # Rollback to previous release in canary environment before merging pr
+  ######################################################################################
+  - name: rollback-canary-before-merging
+    serial: true
+    plan:
+      - get: main
+      - get: common-tasks-extended-repo
+
+      - get: repo-pr
+
+      - get: production-image
+        version: every
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: repo-pr
+        output_mapping:
+          out: chart 
+        params:
+          DEBUG: true
+
+      # Extract PR metadata; task: extract-pr-metadata
+      - task: extract-main-metadata
+        file: common-tasks-extended-repo/extract-pr-meta/task.yml
+        input_mapping:
+          repo: main
+        output_mapping:
+          out: metadata
+        params:
+          ADDITIONAL_TAGS: "main"
+          DEBUG: true
+
+      # Deploy to canary; task: rollback-canary-before-merging
+      - put: deploy-to-canary-pr
+        resource: helm-chart-canary
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/prod.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: metadata/tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-canary.htpasswd))
+
+            - key: vault.slack_webhookURL
+              value: ((alerting.slack_webhookURL))
+
+            - key: vault.pagerduty_serviceKey
+              value: ((alerting.pagerduty_serviceKey))
+
+            - key: vault.CA_CERT
+              value: ((canary.ca_cert))
+
+            - key: vault.PRIV_PEM
+              value: ((canary.priv_pem))
+
+            - key: vault.PUB_PEM
+              value: ((canary.pub_pem))
+  ######################################################################################
+  # Rollback to previous release in dev environment after merging
+  ######################################################################################
+  - name: rollback-staging
+    serial: true
+    plan:
+      - get: main
+      - get: common-tasks-extended-repo
+      - get: production-image
+        params:
+          save: true
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: main
+        output_mapping:
+          out: chart 
+        params:
+          DEBUG: true
+
+      # Extract docker info; task: extract-docker-linted-info
+      - task: extract-docker-linted-info
+        file: common-tasks-extended-repo/extract-docker-linted-info/task.yml
+        input_mapping:
+          image: production-image
+        output_mapping:
+          out: info
+        params:
+          DEBUG: true
+
+      # Deploy to staging; task: rollback-staging
+      - put: deploy-to-staging-from-pr
+        resource: helm-chart-staging
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/dev.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: info/priv_tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-staging.htpasswd))
+
+            - key: vault.slack_webhookURL
+              value: ((alerting.slack_webhookURL))
+
+            - key: vault.pagerduty_serviceKey
+              value: ((alerting.pagerduty_serviceKey))
+  ######################################################################################
+  # Rollback to previous release in canary environment after merging
+  ######################################################################################
+  - name: rollback-canary
+    serial: true
+    plan:
+      - get: main
+      - get: common-tasks-extended-repo
+      - get: production-image
+        version: every
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: main
+        output_mapping:
+          out: chart 
+        params:
+          DEBUG: true
+
+      # Extract docker info; task: extract-docker-linted-info
+      - task: extract-docker-linted-info
+        file: common-tasks-extended-repo/extract-docker-linted-info/task.yml
+        input_mapping:
+          image: production-image
+          debug: "true"
+        output_mapping:
+          out: info
+        params:
+          DEBUG: true
+
+      # Deploy to canary; task: rollback-canary
+      - put: deploy-to-canary-pr
+        resource: helm-chart-canary
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/canary.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: info/priv_tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-canary.htpasswd))
+
+            - key: vault.slack_webhookURL
+              value: ((alerting.slack_webhookURL))
+
+            - key: vault.pagerduty_serviceKey
+              value: ((alerting.pagerduty_serviceKey))
+
+            - key: vault.CA_CERT
+              value: ((canary.ca_cert))
+
+            - key: vault.PRIV_PEM
+              value: ((canary.priv_pem))
+
+            - key: vault.PUB_PEM
+              value: ((canary.pub_pem))
+  ######################################################################################
+  # Rollback to previous release in production environment
+  ######################################################################################
+  - name: rollback-production
+    serial: true
+    plan:
+      - get: main
+      - get: common-tasks-extended-repo
+      - get: production-image
+        version: every
+
+      # Build helm chart; task: helm-build
+      - task: helm-build
+        file: common-tasks-extended-repo/helm-build/task.yml
+        input_mapping:
+          repo: main
+        output_mapping:
+          out: chart 
+        params:
+          DEBUG: true
+
+      # Extract docker info; task: extract-docker-linted-info
+      - task: extract-docker-linted-info
+        file: common-tasks-extended-repo/extract-docker-linted-info/task.yml
+        input_mapping:
+          image: production-image
+        output_mapping:
+          out: info
+        params:
+          DEBUG: true
+
+      # Deploy to production; task: rollback-production
+      - put: deploy-to-prod
+        resource: helm-chart-production
+        params:
+          chart: chart/ci/helm/service-chart
+          values:
+            - chart/ci/helm/service-chart/prod.yaml
+          show_diff: true
+          check_is_ready: false
+          override_values:
+            - key: image.tag
+              path: info/priv_tag
+
+            - key: vault.htpasswd
+              value: ((htpasswd-production.htpasswd))
+
+            - key: vault.slack_webhookURL
+              value: ((alerting.slack_webhookURL))
+
+            - key: vault.pagerduty_serviceKey
+              value: ((alerting.pagerduty_serviceKey))

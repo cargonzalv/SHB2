@@ -1,0 +1,56 @@
+{{- if .Values.kafka_monitoring.enabled }}
+{{- $monitoredTopics :=  .Values.kafka_topics | join "|" }}
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sps-kafka-alerting-rules
+  labels:
+    app: kube-prometheus-stack
+    release: prometheus-operator
+spec:
+  groups:
+    - name: sps-kafka-alerting-rules
+      rules:
+        - alert: SPSKafkaTopicInTrafficLow
+          expr: 'sum by (topic) (irate(kafka_server_brokertopicmetrics_bytesin_total{topic =~ "({{$monitoredTopics}})")" }[1m])) < 10'
+          labels:
+            team: SPS
+            severity: critical
+            namespace: '{{`{{ $labels.namespace }}`}}'
+            datacenter: {{ .Values.global.shared.labels.datacenter }}
+          annotations:
+            info: Kafka topic {{`{{$labels.topic}}`}} in cluster {{`{{$labels.cluster}}`}} IN traffic is low ({{`{{$value}}`}}) bytes.
+            summary: Kafka topic {{`{{$labels.topic}}`}} IN traffic low.
+          for: 10m
+        - alert: SPSKafkaTopicOutTrafficLow
+          expr: |-
+            floor(sum by (topic) (
+              irate(
+                kafka_server_brokertopicmetrics_bytesout_total{topic =~ "({{$monitoredTopics}})"}[1m]
+              )
+            ) / sum by (topic) (
+              irate(
+                kafka_server_brokertopicmetrics_bytesin_total{topic =~ "({{$monitoredTopics}})" }[1m]
+              )
+            ) * 100) < 75
+          for: 10m
+          labels:
+            team: SPS
+            severity: critical
+            namespace: '{{`{{ $labels.namespace }}`}}'
+            datacenter: {{ .Values.global.shared.labels.datacenter }}
+          annotations:
+            info: Kafka topic {{`{{$labels.topic}}`}} cluster {{`{{$labels.cluster}}`}} traffic is {{`{{$value}}`}}% lower than inbound.
+            summary: Kafka topic {{`{{$labels.topic}}`}} in cluster {{`{{$labels.cluster}}`}} has OUT traffic much lower than inbound.
+        - alert: PlatformKafkaConnectConnectorTimeLagHigh
+          expr: 'floor(max(kafka_consumergroup_group_lag_seconds{group =~ "(connect-sps.*)", group != "connect-sps.sessionheartbeatevent-sps.sessionheartbeatevent"}) by (topic)) > 1800'
+          labels:
+            team: SPS
+            severity: critical
+            namespace: '{{`{{ $labels.namespace }}`}}'
+            datacenter: {{ .Values.global.shared.labels.datacenter }}
+          annotations:
+            info: Kafka connect cluster {{`{{$labels.cluster}}`}} has high time lag ({{`{{$value}}`}}) for topic {{`{{$labels.topic}}`}}
+            summary: Kafka connect cluster {{`{{$labels.cluster}}`}} high time lag ({{`{{$value}}`}}s late). Topic . Topic {{`{{$labels.topic}}`}}.
+{{- end }}

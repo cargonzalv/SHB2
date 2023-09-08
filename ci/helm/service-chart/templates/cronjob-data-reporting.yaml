@@ -1,0 +1,57 @@
+{{- if .Values.ReportingCron.enabled -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: data-reporting
+  labels:
+    {{- include "service.labels" . | nindent 4 }}
+    {{- include "shared.labels" . | nindent 4 }}
+spec:
+  schedule: "{{ .Values.ReportingCron.schedule }}"
+  {{- with .Values.ReportingCron.concurrencyPolicy }}
+  concurrencyPolicy: {{ . }}
+  {{- end }}
+  {{- with .Values.ReportingCron.failedJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ . }}
+  {{- end }}
+  {{- with .Values.ReportingCron.successfulJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ . }}
+  {{- end }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          {{- with .Values.global.shared.labels }}
+          labels:
+            {{- toYaml . | nindent 122 }}
+          {{- end }}
+          {{- with .Values.ReportingCron.annotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: publica-logs-sync
+              image: "{{ .Values.cron_image.repository }}:{{ .Values.cron_image.tag }}"
+              imagePullPolicy: IfNotPresent
+              command: 
+              - /usr/bin/bash
+              args:
+              - /root/scripts/data-reporting.sh
+              volumeMounts:
+              - name: configvol
+                mountPath: /root/scripts
+              env:
+                - name: slack_webhookURL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "service.fullname" . }}-secret
+                      key: slack_webhookURL
+              resources:
+                {{- toYaml .Values.cronresources | nindent 16 }}
+          volumes:
+          - name: configvol
+            configMap:
+              name: {{ include "service.fullname" . }}-cron-data-reporting-configmap
+{{- end }}

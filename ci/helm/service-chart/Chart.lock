@@ -1,0 +1,6 @@
+dependencies:
+- name: shared
+  repository: https://adgear.jfrog.io/adgear/adgear-helm
+  version: 0.3.0
+digest: sha256:209f338682830b370b577ab4bfc31801e41c55684612df1fe2e7e0f89a4a7fe7
+generated: "2022-06-15T19:29:33.883007-04:00"

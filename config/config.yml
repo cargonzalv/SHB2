@@ -1,0 +1,52 @@
+app:
+   name: "sps-header-bidder"
+   version: "0.1.0"
+   environment: "dev"
+
+http:
+  host: "localhost"
+  port: "8085"
+
+connection:
+  retry: 300
+  timeout: 1800
+
+logger:
+  level: "Debug"
+
+kafka:
+  enable_offline_storage: true
+  force_offline_storage: true
+  offline_storage_path: "not_set"
+  inventory_event_topic: "sps.inventoryevent"
+  ad_event_topic: "sps.adevent"
+  brokers: "not_set" 
+  pool_size: 5
+
+schema_registry:
+  server: "https://schema-registry.k8s.adgear.com"
+  ad_event_key: "sps.adevent-value"
+  inventory_event_key: "sps.inventoryevent-value"
+  ad_event_schema_file: "./assets/ad-event.avsc"
+  inventory_event_schema_file: "./assets/inventory-event.avsc"
+
+ssl:
+  ca_cert: nil
+  priv_pem: nil
+  pub_pem: nil 
+
+publica:
+  endpoint: "https://pbs.getpublica.com/v1/s2s-hb"
+  app_bundle: "com.test"
+  format: "json"
+
+s3:
+  region: "us-east-1"
+  bucket: nil
+  assume_role: nil
+  optout_prefix: "compliance/opt_out/singles/v1/"
+  optout_success_file_key: "compliance/opt_out/singles/v1/_SUCCESS"
+
+cache:
+  key_ttl: 24 ## hours
+  load_timestamp_key: "last_load_timestamp"

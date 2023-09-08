@@ -1,0 +1,17 @@
+metadata:
+  name: sps-header-bidder
+  description: "SPS Header bidder backend for receiving open RTB requests and logging them in Kafka and UDW"
+  labels:
+    stack: "golang"
+    practice: "engineering"
+    jira-project: "PP" 
+    jira-board: 82
+    public: true
+    sensitive: false
+  links:
+    - url: https://sps-header-bidder.adgear.com/...
+
+spec:
+  owner: cg-sps
+  type: service
+  lifecycle: production

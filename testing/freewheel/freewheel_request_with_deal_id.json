@@ -1,0 +1,103 @@
+{
+    "app": {
+        "bundle": "com.app.examplebundle",
+        "id": "1576578",
+        "publisher": {
+            "id": "189213"
+        }
+    },
+    "at": 2,
+    "cur": [
+        "USD",
+        "CAD",
+        "GBP",
+        "AUD",
+        "EUR",
+        "JPY"
+    ],
+    "device": {
+        "devicetype": 3,
+        "ext": {
+            "ifa_type": "rida"
+        },
+        "geo": {
+            "country": "USA",
+            "zip": "97060"
+        },
+        "ifa": "1618a0b6-0f62-5bb6-9a7d-c6198dc0d644",
+        "ip": "24.20.244.18",
+        "os": "roku os",
+        "ua": "Mozilla/5.0 (QSP; Roku; AP; 4.2.6.200)"
+    },
+    "id": "a157-1570737723873303012-ATN-DV3-98701-34784115-5",
+    "imp": [
+        {
+            "displaymanager": "FreeWheel",
+            "displaymanagerver": "1.0",
+            "id": "0",
+            "pmp": {
+                "deals": [
+                    {
+                        "at": 3,
+                        "bidfloor": 25.277603,
+                        "bidfloorcur": "EUR",
+                        "ext": {
+                            "sam_flags": "pbid",
+                            "sam_hb_tag": "27083",
+                            "sam_app_id": "TEST-App-Id012323889 == 23889 26843 26839",
+                            "sam_session_id": "888888e2-621f-4f6a-844c-d21aed450c2a"
+                        },
+                        "id": "ATN-000000",
+                        "wseat": [
+                            "426572"
+                        ]
+                    }
+                ],
+                "private_auction": 1
+            },
+            "secure": 0,
+            "video": {
+                "battr": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    13,
+                    14
+                ],
+                "h": 720,
+                "linearity": 1,
+                "maxduration": 30,
+                "mimes": [
+                    "application/x-mpegURL",
+                    "application/x-mpegurl",
+                    "application/xml",
+                    "video/3gpp",
+                    "video/mp4",
+                    "video/webm",
+                    "video/x-flv",
+                    "video/x-ms-wmv"
+                ],
+                "minduration": 1,
+                "placement": 1,
+                "playbackmethod": [
+                    1
+                ],
+                "protocols": [
+                    2,
+                    5
+                ],
+                "startdelay": -1,
+                "w": 1280
+            }
+        }
+    ],
+    "user": {}
+}

@@ -1,0 +1,12 @@
+{{- if .Values.ReportingCron.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "service.fullname" . }}-cron-dms-diamondapp-sync-configmap
+  labels:
+    {{- include "service.labels" . | nindent 4 }}
+    {{- include "shared.labels" . | nindent 4 }}
+data:
+{{ (.Files.Glob "cronjob/dms-diamondapp-sync/*").AsConfig | indent 2 }}
+
+{{- end }}
